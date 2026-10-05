@@ -1,0 +1,45 @@
+# Dependencies, local package archives, generated builds and test output
+node_modules/
+*.tgz
+coverage/
+dist/
+build/
+*.tsbuildinfo
+.cache/
+.npm/
+
+# Secrets and machine configuration
+.env*
+.codex/
+.codex-hud/
+auth.json
+
+# Private telemetry / databases and SQLite sidecars
+*.sqlite*
+*.db
+*.db-*
+*.db3
+*.duckdb
+*.mdb
+*.accdb
+*.wal
+*.shm
+*.jsonl
+*.jsonl.gz
+sessions/
+archived_sessions/
+session_index.jsonl
+
+# Local logs and runtime / development output
+*.log
+*.log.gz
+logs/
+runtime/
+tmp/
+temp/
+/work/
+/outputs/
+docs/local-*
+
+# Synthetic fixtures are constructed by test/*.js in temporary directories.
+# Keep those JavaScript test sources; never commit real telemetry as fixtures.

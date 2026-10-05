@@ -1,0 +1,12 @@
+{
+  "name": "codex-hud",
+  "version": "1.2.0",
+  "description": "Local Codex session browser, terminal HUD, SQLite telemetry recorder and historical workload statistics",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": { "codex-hud": "bin/codex-hud.js" },
+  "scripts": { "test": "node --test test/*.test.js", "start": "node bin/codex-hud.js" },
+  "engines": { "node": ">=22.13.0" },
+  "files": ["bin/", "lib/", "README.md", "LICENSE", "NOTICE.md", "docs/ARCHITECTURE.md", "docs/RECORDER.md"],
+  "keywords": ["codex", "hud", "telemetry", "terminal"]
+}
