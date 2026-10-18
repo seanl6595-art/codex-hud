@@ -61,6 +61,18 @@ test('swapped primary/secondary are classified by window_minutes', () => {
   const l = limit(); [l.primary, l.secondary] = [l.secondary, l.primary];
   assert.equal(evaluateSubscription(snap(l), NOW).fiveHour.usedPercent, 10);
 });
+test('duplicate five-hour or weekly durations are ambiguous rather than first-slot wins', () => {
+  for (const [minutes,key] of [[300,'fiveHour'],[10080,'weekly']]) {
+    const l=limit(); l.primary.window_minutes=minutes; l.secondary.window_minutes=minutes;
+    const s=evaluateSubscription(snap(l),NOW); assert.equal(s[key].state,'UNKNOWN');
+    assert.equal(s[key].usedPercent,null); assert.match(s[key].reason,/ambiguous/);
+  }
+});
+test('weekly-only prolite preserves absent five-hour UNKNOWN independently of plan label', () => {
+  const l=limit(); l.plan_type='prolite'; l.primary=l.secondary; l.secondary=null;
+  const s=evaluateSubscription(snap(l),NOW); assert.equal(s.plan,'prolite'); assert.equal(s.weekly.state,'ACTIVE');
+  assert.equal(s.fiveHour.state,'UNKNOWN'); assert.equal(s.fiveHour.usedPercent,null);
+});
 test('invalid timestamp, future timestamp and malformed percentage are unknown', () => {
   assert.equal(snapshotFromRecord({ type: 'event_msg', timestamp: 'bad', payload: { type: 'token_count', rate_limits: limit() } }, 'x', null, NOW), null);
   assert.equal(snap(limit(), NOW + 120000), null);

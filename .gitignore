@@ -43,3 +43,8 @@ docs/local-*
 
 # Synthetic fixtures are constructed by test/*.js in temporary directories.
 # Keep those JavaScript test sources; never commit real telemetry as fixtures.
+
+# Browser verification
+playwright-report/
+test-results/
+.gui-preview/

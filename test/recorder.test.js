@@ -171,7 +171,7 @@ test('recorder: prompt/response/reasoning/tool/file text is absent from every ta
   const columns = table => f.r.db.prepare(`PRAGMA table_info(${table})`).all().map(r => r.name);
   assert.deepEqual(columns('telemetry_events'), EVENT_COLUMNS); assert.deepEqual(columns('sources'), SOURCE_COLUMNS);
   assert.deepEqual(f.r.db.prepare("SELECT name FROM sqlite_schema WHERE type IN ('table','view') ORDER BY name").all().map(r => r.name),
-    ['event_features_v1', 'recorder_meta', 'sources', 'telemetry_events']);
+    ['event_features_v1', 'event_provenance_v1', 'recorder_meta', 'sources', 'telemetry_events']);
   for (const name of fs.readdirSync(f.home).filter(n => n.startsWith('telemetry.sqlite3'))) {
     assert.ok(!fs.readFileSync(path.join(f.home, name)).includes(Buffer.from(secret)));
   }

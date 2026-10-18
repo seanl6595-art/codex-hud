@@ -56,3 +56,14 @@ The official session index is used for rename; the app's internal SQLite databas
 A local home can contain historical accounts and stale snapshots from other devices. Identity is not authenticated. This is a telemetry viewer, not a live quota API. Observation time, unknown states and incomplete scan diagnostics preserve that distinction.
 
 `requestCount` counts changes in adjacent total/last usage snapshot pairs. Distinct requests with identical usage and absent cumulative data cannot be distinguished. Turns are the unique IDs visible in the selected file; inherited history is counted if it actually appears there.
+
+
+## GUI preview architecture
+
+The gui command lazily loads lib/gui/index.js. A native HTTP server serves dist/gui and same-origin API endpoints on 127.0.0.1 only. No frontend framework runs in the Node request path.
+
+lib/gui/service.js coordinates separate reader and Recorder workers. lib/gui/data-worker.js reuses existing DataSource, Stats and read-only database access. lib/gui/recorder-worker.js schedules non-overlapping scans through the unchanged Recorder class; controls are scoped to this GUI instance. Neither worker changes the Recorder schema.
+
+Optional Stats buckets accumulate the existing accounted deltas using the same accumulators and completeness flags. lib/stats-buckets.js supplies calendar/hour grouping, not an alternate accounting algorithm. Range totals and all buckets come from one SQLite read transaction per report. Default CLI Stats output is preserved.
+
+The React client uses deduplicated SWR queries and lazy-loaded charts. Heatmap data has an independent 84-calendar-day query. Compiled frontend dependencies ship as static assets; package runtime code uses Node built-ins only. See GUI.md for endpoint behavior, boundaries, privacy and validation limits.

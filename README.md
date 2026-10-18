@@ -43,6 +43,18 @@ node .\bin\codex-hud.js
 
 All examples below work through the linked `codex-hud` command or by replacing it with `node .\bin\codex-hud.js` from the checkout.
 
+## Local web GUI preview (v1.3 branch)
+
+The GUI preview adds a local dashboard, interactive Statistics, a separate 12-week token activity heatmap, session details and opt-in Recorder controls. The published v1.2.0 release remains unchanged.
+
+```powershell
+npm install
+npm run build:gui
+node ./bin/codex-hud.js gui
+```
+
+The server opens `http://127.0.0.1:4317`. Use `--no-open` or `--port N` when needed. Compiled GUI assets are included in locally packed installations; no frontend build is required after installing the package. See [docs/GUI.md](docs/GUI.md) for range semantics, packaging and validation limits.
+
 ## Session Browser / HUD
 
 ```powershell
@@ -99,6 +111,19 @@ Tables: `recorder_meta`, `sources`, `telemetry_events`; derived view: `event_fea
 
 ## Historical Usage Stats
 
+Usage accounting distinguishes verified allowance-only notifications from missing
+usage. Legacy databases are read without migration; original source hashes can
+recover classification, while unavailable evidence stays unknown. New databases
+persist provenance. An existing database can opt in with
+`codex-hud upgrade-provenance --db PATH --codex-home PATH`.
+See [accounting and compatibility](docs/ACCOUNTING.md) for the precise rules.
+
+Repeated GUI queries reuse memory-only evidence bound to the exact committed
+history. The UI shows verification age and offers **Recheck source files**;
+`codex-hud stats --verify-sources` also forces a fresh cryptographic check.
+Cached evidence describes previously verified history, not a guarantee that files
+are unchanged now. No persistent cache or production migration is required.
+
 Stats reads the existing Recorder database without ingesting session logs or modifying any table, view or checkpoint:
 
 ```powershell
@@ -151,7 +176,7 @@ Browser/HUD options include `--file PATH`, `--current-project`, `--recent N`, `-
 - READY means an old valid 5h window ended and newer telemetry is awaited; it is not server confirmation of available quota. Expired weekly snapshots are stale. Missing data and ambiguous/multiple-account histories remain uncertain; use a separate Codex home per account.
 - Full-prefix Recorder integrity checks and full-sequence Stats reads scale with history. A slower Recorder interval can reduce local disk reads. Unusually large JSONL lines require proportionally more memory.
 - Very small terminals may truncate the HUD. Windows/PowerShell with Node 24 is tested; other terminal/platform combinations are not claimed tested here.
-- No quota estimator, Estimated Weekly Burn, per-session quota attribution, chart or web dashboard is provided.
+- No quota estimator, Estimated Weekly Burn or per-session quota attribution is provided. The v1.3 branch includes the local GUI preview described above.
 
 ## Development and license
 

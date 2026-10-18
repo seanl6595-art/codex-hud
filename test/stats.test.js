@@ -66,11 +66,12 @@ test('stats 5: recognized cumulative reset C < P and C == L accounts C', t => {
   f.insert({ seq: 2, current: [120, 80, 20, 8] });
   const s = f.stats(); assert.equal(s.totals.input.value, 120); assert.equal(s.activity.usageEvents, 1);
 });
-test('stats 6: unrecognized decreases remain independent indeterminate metrics', t => {
+test('stats 6: an ambiguous primary reset cannot certify other positive-predecessor deltas', t => {
   const f = setup(t); f.insert({ seq: 1, at: BEFORE, current: [1000, 800, 100, 40] });
   f.insert({ seq: 2, current: [500, 900, 110, 45], last: [120, 80, 10, 5] });
-  const s = f.stats(); assert.equal(s.totals.input.value, null); assert.equal(s.totals.cached.value, 100);
-  assert.equal(s.totals.output.value, 10); assert.equal(s.activity.usageEvents, 1);
+  const s = f.stats(); assert.equal(s.totals.input.value, null); assert.equal(s.totals.cached.value, null);
+  assert.equal(s.totals.output.value, null); assert.equal(s.activity.usageEvents, 0);
+  for (const key of ['cached', 'output', 'reasoning']) assert.equal(s.totals[key].incompleteReasons.ambiguous_reset, 1);
 });
 test('stats 7: actual Recorder task/model/effort/turn boundaries do not reset cumulative adjacency', async t => {
   const f = setup(t), medium = context('turn-2', 'gpt-6-luna'); medium.payload.effort = 'medium';
@@ -295,4 +296,85 @@ test('stats: renderer sanitizes current names and CLI Stats does not change defa
   const out = renderHistoricalUsageStats(f.stats()); assert.doesNotMatch(out, /\u001b/); assert.match(out, /Injected name/);
   const { parseArgs } = require('../lib/cli'); assert.equal(parseArgs([]).command, 'hud');
   assert.throws(() => parseArgs(['record', '--from', 'x', '--to', 'y'])); assert.throws(() => parseArgs(['stats', '--once']));
+});
+
+
+function reconcileBuckets(f, options) {
+  const { buckets = 'hour', ...periodOptions } = options;
+  const plain = f.stats(periodOptions), bucketed = f.stats({ ...periodOptions, buckets });
+  assert.equal('buckets' in plain, false);
+  assert.deepEqual(bucketed.totals, plain.totals);
+  assert.deepEqual(bucketed.ratios, plain.ratios);
+  assert.deepEqual(bucketed.sessions, plain.sessions);
+  for (const key of Object.keys(plain.totals)) {
+    const cells = bucketed.buckets.map(b => b.totals[key]);
+    const valid = cells.reduce((n, m) => n + m.validObservations, 0);
+    const invalid = cells.reduce((n, m) => n + m.indeterminateObservations, 0);
+    assert.equal(valid, plain.totals[key].validObservations);
+    assert.equal(invalid, plain.totals[key].indeterminateObservations);
+    assert.equal(valid || !invalid ? cells.reduce((n, m) => n + (m.value ?? 0), 0) : null, plain.totals[key].value);
+    assert.equal(cells.every(m => m.complete), plain.totals[key].complete);
+  }
+  assert.equal(bucketed.buckets.reduce((n, b) => n + b.observations, 0), plain.coverage.observations);
+  assert.equal(bucketed.buckets.reduce((n, b) => n + b.activity.usageEvents, 0), plain.activity.usageEvents);
+  return bucketed;
+}
+test('GUI buckets reconcile growth, duplicates, resets, gaps, missing metrics and half-open bounds', t => {
+  const f = setup(t);
+  f.insert({ seq: 1, at: BEFORE, current: [100, 50, 20, 8] });
+  f.insert({ seq: 2, at: FROM, current: [120, 60, 24, 9] });
+  f.insert({ seq: 3, at: INSIDE, current: [120, 60, 24, 9] });
+  f.insert({ seq: 4, at: '2026-01-01T13:00:00Z', current: [10, 5, 2, 1] });
+  f.insert({ seq: 6, at: '2026-01-01T14:00:00Z', current: [40, null, 8, null] });
+  f.insert({ seq: 7, at: '2026-01-01T15:00:00Z', current: [50, 20, 10, 3] });
+  f.insert({ seq: 8, at: '2026-01-01T16:00:00Z', current: [999, 500, 100, 30] });
+  for (const buckets of ['hour', 'day']) reconcileBuckets(f, { from: FROM, to: '2026-01-01T16:00:00Z', buckets });
+});
+test('GUI buckets preserve unknown timestamp incompleteness and direct predecessor adjacency', t => {
+  const f = setup(t);
+  f.insert({ seq: 1, at: null, current: [100, 50, 20, 8] });
+  f.insert({ seq: 2, current: [120, 60, 25, 10] });
+  const s = reconcileBuckets(f, { from: FROM, to: '2026-01-02T12:00:00Z', buckets: 'hour' });
+  assert.ok(s.buckets.every(b => !b.totals.input.complete));
+  assert.equal(s.totals.input.value, 20);
+});
+test('GUI daily buckets follow local calendar dates across spring and fall DST', t => {
+  for (const [from, to, expectedHours] of [
+    ['2026-03-07T00:00', '2026-03-10T00:00', 71],
+    ['2025-11-01T00:00', '2025-11-04T00:00', 73]
+  ]) {
+    const f = setup(t), timezone = 'America/Vancouver';
+    const start = parseLocalDateTime(from, timezone), end = parseLocalDateTime(to, timezone);
+    f.insert({ seq: 1, at: start, current: [10, 5, 2, 1] });
+    f.insert({ seq: 2, at: new Date(Date.parse(end) - 1).toISOString(), current: [20, 10, 4, 2] });
+    const s = reconcileBuckets(f, { from: start, to: end, timezone, buckets: 'day' });
+    assert.equal(s.buckets.length, 3);
+    assert.equal((Date.parse(end) - Date.parse(start)) / 3600000, expectedHours);
+    assert.equal(s.buckets[0].key, from.slice(0, 10));
+    const hourly = reconcileBuckets(f, { from: start, to: end, timezone, buckets: 'hour' });
+    assert.equal(hourly.buckets.length, expectedHours);
+    assert.equal(new Set(hourly.buckets.map(b => b.key)).size, expectedHours);
+  }
+});
+test('GUI cells distinguish missing observations, observed zero and incomplete telemetry', t => {
+  const f = setup(t);
+  f.insert({ seq: 1, at: '2026-01-01T12:00:00Z', current: [0, 0, 0, 0] });
+  f.insert({ seq: 2, at: '2026-01-01T14:00:00Z', current: [null, null, null, null] });
+  const s = f.stats({ to: '2026-01-01T15:00:00Z', buckets: 'hour' });
+  assert.deepEqual(s.buckets.map(b => b.state), ['zero', 'missing', 'incomplete']);
+});
+test('GUI 12-week heatmap includes exactly 84 local dates including today', () => {
+  const { heatmapPeriod, createBuckets } = require('../lib/stats-buckets');
+  for (const now of ['2026-03-10T18:00:00Z', '2026-03-10T07:00:00Z']) {
+    const options = heatmapPeriod(Date.parse(now), 'America/Vancouver');
+    const period = resolvePeriod(options);
+    const cells = createBuckets(period, 'day', ['input'], () => ({}), () => {}, () => ({}), options.includeEndDate).finish();
+    assert.equal(cells.length, 84); assert.equal(cells.at(-1).key, '2026-03-10');
+  }
+});
+test('GUI buckets reject unsupported or oversized aggregation before creating a DB', t => {
+  const f = fixture(t), dbPath = path.join(f.home, 'absent.sqlite3');
+  assert.throws(() => getHistoricalUsageStats({ dbPath, buckets: 'minute' }), /hour or day/);
+  assert.throws(() => getHistoricalUsageStats({ dbPath, buckets: 'hour', from: '2020-01-01T00:00:00Z', to: '2026-01-01T00:00:00Z' }), /shorter range/);
+  assert.equal(fs.existsSync(dbPath), false);
 });

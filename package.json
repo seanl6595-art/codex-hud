@@ -4,9 +4,51 @@
   "description": "Local Codex session browser, terminal HUD, SQLite telemetry recorder and historical workload statistics",
   "license": "MIT",
   "type": "commonjs",
-  "bin": { "codex-hud": "bin/codex-hud.js" },
-  "scripts": { "test": "node --test test/*.test.js", "start": "node bin/codex-hud.js" },
-  "engines": { "node": ">=22.13.0" },
-  "files": ["bin/", "lib/", "README.md", "LICENSE", "NOTICE.md", "docs/ARCHITECTURE.md", "docs/RECORDER.md"],
-  "keywords": ["codex", "hud", "telemetry", "terminal"]
+  "bin": {
+    "codex-hud": "bin/codex-hud.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "start": "node bin/codex-hud.js",
+    "build:gui": "tsc -p tsconfig.gui.json && vite build",
+    "prepack": "npm run build:gui",
+    "test:browser": "playwright test"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "README.md",
+    "LICENSE",
+    "NOTICE.md",
+    "docs/ARCHITECTURE.md",
+    "docs/RECORDER.md",
+    "docs/ACCOUNTING.md",
+    "docs/ROLLOUT-OWNERSHIP.md",
+    "dist/gui/",
+    "docs/GUI.md"
+  ],
+  "keywords": [
+    "codex",
+    "hud",
+    "telemetry",
+    "terminal"
+  ],
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "lucide-react": "^1.59.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "recharts": "^3.10.1",
+    "swr": "^2.5.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4"
+  }
 }
