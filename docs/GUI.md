@@ -1,10 +1,10 @@
-# Local GUI preview (v1.3 branch)
+# Codex HUD GUI (v1.3.0-beta.1 public beta)
 
-This is the functional GUI preview on feature/gui-v1.3. The published v1.2.0 tag and release are unchanged. Final visual polish and release preparation are pending user feedback.
+The GUI remains a preview in the v1.3.0-beta.1 public beta on feature/gui-v1.3. The published v1.2.0 tag and release are unchanged. See RELEASE-CANDIDATE.md for current validation and native-platform limitations.
 
 ## Launch from a source checkout
 
-Requires Node.js 22.13+ (validated here with Node 24 on Windows).
+Requires Node.js 24.21.0 or newer with built-in `node:sqlite` (24.21.0 validated on Windows; native macOS validation pending). Earlier Node 24 patches and Node 22 are unsupported.
 
     npm install
     npm run build:gui
@@ -15,7 +15,7 @@ The server prints http://127.0.0.1:4317 and opens the default browser. Ctrl+C st
     node ./bin/codex-hud.js gui --no-open --port 4318
     codex-hud gui --db PATH --codex-home PATH --interval 5
 
-Use --port 0 to select a free loopback port. There is no public-network binding option. Windows uses the system URL handler; macOS uses open; Linux uses xdg-open. macOS has not been physically validated in this session.
+Use --port 0 to select a free browser-safe loopback port in 49152-65535. Explicit browser-blocked ports report an error. There is no public-network binding option. Windows uses the system URL handler; macOS uses open; Linux uses xdg-open. macOS has not been physically validated in this session.
 
 ## Packaged installations
 
@@ -75,15 +75,15 @@ The current initial validation covers date controls, DST errors, bucket reconcil
 - UI translations live in gui/src/i18n.tsx. Navigation, headings, controls, status messages, empty/error states, dates, chart labels and tooltips are localized. User-provided session names, model identifiers, source IDs and technical error codes retain their original values.
 - gui/src/formatters.mjs is the shared display formatter: exact values below 1K, then K/M/B with one decimal when useful. Rounding can carry into the next unit. Exact token values remain available in titles and two-line interactive tooltips; missing values remain unavailable. Display formatting never changes stored or accounted values.
 - Usage trends default to Bar and can switch to Line. The selected type is stored in codex-hud.chart-type.v1. Both charts receive the same buckets; missing observations remain gaps, including in Line mode.
-- Three blue ramps were compared in a browser: cobalt/ice, azure/glacier and indigo/mist. Cobalt/ice was selected. The five positive levels are relative to the largest complete observed day: >0–10%, >10–25%, >25–50%, >50–75%, and >75–100%. Incomplete days are hatched and do not establish the visual maximum. Recorded zero and no observations retain separate neutral treatments.
+- Three blue ramps were compared in a browser: cobalt/ice, azure/glacier and indigo/mist. Cobalt/ice was selected. The five positive levels are relative to the largest complete observed day: >0â€“10%, >10â€“25%, >25â€“50%, >50â€“75%, and >75â€“100%. Incomplete days are hatched and do not establish the visual maximum. Recorded zero and no observations retain separate neutral treatments.
 - Dashboard is the concise overview: quick ranges, summary metrics, the independent 12-week heatmap, five Top Sessions, and compact trends. Analyze this range leads to the complete Statistics controls.
 - Statistics includes full range controls, larger charts, ranking search and expandable bucket data. Rankings default to Top 10 and support Top 25, Top 50 and All. All and larger lists paginate in batches of at most 25; search runs against the full ranking dataset before applying the display limit. Global ranking positions and the original period Input shares are preserved.
 - Token formatting and localization have no effect on accounting, timezone conversion, cumulative adjacency, completeness or query boundaries. That earlier bilingual revision changed no backend or accounting files.
 
 
-## Comfortable layout and expanded analytics preview — 2026-10-17
+## Comfortable layout and expanded analytics preview â€” 2026-10-17
 
-Continue on feature/gui-v1.3. HEAD remains 979c3d291f812aba6f925f7384365f6d6aac147e; the release version remains 1.2.0. Existing uncommitted work was preserved. No merge, push, publication, schema migration, or Recorder edit was performed.
+This section describes the preview layout retained in the v1.3.0-beta.1 beta. No additional GUI redesign is part of release preparation.
 
 ### Preview and relaunch
 
@@ -96,11 +96,11 @@ Stop the relevant preview before reusing its port. Ctrl+C stops a foreground lau
 
 ### Implemented
 
-- Content uses 94% of the workspace, capped at 2360px, with comfortable 14–16px text, larger metrics and tables, and 340–380px normal charts. Breakpoints reflow the sidebar, cards and panels without page overflow.
+- Content uses 94% of the workspace, capped at 2360px, with comfortable 14â€“16px text, larger metrics and tables, and 340â€“380px normal charts. Breakpoints reflow the sidebar, cards and panels without page overflow.
 - Usage and model time-series charts, plus the blue heatmap, expand into native accessible dialogs. Escape, close and backdrop dismissal restore focus. Existing plot data is reused on expansion. Input/Output visibility and chart type persist across opening and closing; the main chart type and language retain their existing local-storage persistence.
 - Usage charts provide zero-based adaptive major/minor scales, a keyboard-operable time brush, optional independent aligned Input/Output scales, and a default Connect gaps option. Dashed segments join recorded endpoints across missing buckets only. They add no intermediate values and never change accounting. Incomplete metric values use outlined marks; unknown metrics remain unavailable. Tooltips explicitly distinguish missing observations and recorded zero.
 - The independent heatmap defaults to 12 weeks. Expanded mode supports 12/26/52 local-calendar weeks and navigation one week at a time. Changing the calendar window queries that window; opening the default expanded view does not recalculate it. Five blue intensity bands, recorded zero, no observations and incomplete states remain separate.
-- Statistics adds model distribution, sortable/searchable Top 5 / Top 10 / All tables (25 rows per page), model time series with stacked bars or individual lines, related sessions, reasoning-effort distribution/totals and model × effort drill-down. Model/effort filters apply together across these related analytics and use exactly the selected Statistics boundaries. The general summary and session ranking retain their full-period scope. Table text search affects table rows; the model distribution always retains Unknown.
+- Statistics adds model distribution, sortable/searchable Top 5 / Top 10 / All tables (25 rows per page), model time series with stacked bars or individual lines, related sessions, reasoning-effort distribution/totals and model Ã— effort drill-down. Model/effort filters apply together across these related analytics and use exactly the selected Statistics boundaries. The general summary and session ranking retain their full-period scope. Table text search affects table rows; the model distribution always retains Unknown.
 - Input, Output and Input + Output are selectable workloads. Cached and Reasoning are never added again. Model colors remain consistent across distribution, table, time series and model filtering. All new controls and explanations are available in English and Simplified Chinese.
 
 ### Accounting definitions and limits

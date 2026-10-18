@@ -1,5 +1,7 @@
 # Recorder v1 contract
 
+Requires Node.js 24.21.0 or newer with built-in `node:sqlite`; Node 22 and earlier Node 24 patches are unsupported. No separate SQLite executable is required.
+
 SQLite is the primary local store; CSV/JSONL are not primary stores. `record` is explicitly enabled and does not change default HUD behavior. No network or model dependencies exist. Node's built-in `node:sqlite` provides synchronous SQLite transactions with WAL, `synchronous=FULL`, foreign keys and a five-second writer busy timeout. Each source scan holds `BEGIN IMMEDIATE` while loading and updating its checkpoint, preventing competing processes from committing against a stale checkpoint. A busy recorder reports an operational error and retries on the next scan.
 
 ## Identity and source copies

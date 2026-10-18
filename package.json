@@ -1,6 +1,6 @@
 {
   "name": "codex-hud",
-  "version": "1.2.0",
+  "version": "1.3.0-beta.1",
   "description": "Local Codex session browser, terminal HUD, SQLite telemetry recorder and historical workload statistics",
   "license": "MIT",
   "type": "commonjs",
@@ -12,15 +12,17 @@
     "start": "node bin/codex-hud.js",
     "build:gui": "tsc -p tsconfig.gui.json && vite build",
     "prepack": "npm run build:gui",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "test:package": "node scripts/verify-package.cjs"
   },
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=24.21.0"
   },
   "files": [
     "bin/",
     "lib/",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE",
     "NOTICE.md",
     "docs/ARCHITECTURE.md",
@@ -28,7 +30,10 @@
     "docs/ACCOUNTING.md",
     "docs/ROLLOUT-OWNERSHIP.md",
     "dist/gui/",
-    "docs/GUI.md"
+    "docs/GUI.md",
+    "docs/RELEASE-NOTES-v1.3.0-beta.1.md",
+    "docs/RELEASE-CANDIDATE.md",
+    "docs/BETA-TESTING.md"
   ],
   "keywords": [
     "codex",

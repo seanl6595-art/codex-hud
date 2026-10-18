@@ -1,0 +1,31 @@
+name: Native macOS compatibility
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.21.0'
+          cache: npm
+      - run: npm ci
+      - name: Repeat the complete Node suite
+        run: |
+          npm test
+          npm test
+          npm test
+      - run: npm run build:gui
+      - run: npx --no-install playwright install chrome
+      - run: npm run test:browser
+      - run: npm pack --dry-run
+      - run: npm pack
+      - name: Install and verify the actual package
+        run: npm run test:package -- ./codex-hud-1.3.0-beta.1.tgz
+        env:
+          CODEX_HUD_PACKAGE_BROWSER: '1'
+      - run: git diff --exit-code

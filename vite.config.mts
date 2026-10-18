@@ -4,5 +4,5 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
   root: 'gui',
   plugins: [react(), tailwindcss()],
-  build: { outDir: '../dist/gui', emptyOutDir: true },
+  build: { outDir: '../dist/gui', emptyOutDir: true, license: { fileName: 'THIRD-PARTY-NOTICES.md' } },
 });
