@@ -9,6 +9,7 @@ test('first launch is sandboxed, reads history without changes, and closes clean
   const runtime=status(current).runtime;expect(runtime.electron).toBe(require('../../package.json').devDependencies.electron);expect(require('../../../lib/runtime').supportsNode(runtime.node)).toBe(true);expect(runtime.transactions).toBe(true);
   await expect(current.page.locator('.heatmap-grid button')).toHaveCount(84);await expect(current.page.locator('.session-item')).toHaveCount(0);
   const recorder=await(await api(current,'/api/recorder')).json();expect(recorder.running).toBe(false);expect(recorder.events).toBeGreaterThan(0);
+  expect((await(await api(current,'/api/sessions')).json()).sessions).toHaveLength(6);
   const prefs=await current.app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences());expect(prefs.contextIsolation).toBe(true);expect(prefs.sandbox).toBe(true);expect(prefs.nodeIntegration).toBe(false);
   expect(await current.page.evaluate(()=>({require:typeof require,process:typeof process}))).toEqual({require:'undefined',process:'undefined'});
   const origin=new URL(current.page.url()).origin,token=(await(await fetch(origin+'/api/bootstrap')).json()).token;
@@ -32,7 +33,7 @@ test('repeated launch restores/focuses one window and one backend',async({},info
   const backend=await current.app.evaluate(({app})=>app.getAppMetrics().find(m=>m.name==='Codex HUD backend').pid);
   await current.app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].minimize());await until(()=>current.app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].isMinimized()),10000,'The native window did not minimize');
   const second=spawn(executable(),current.args,{env:current.env,cwd:path.dirname(executable()),windowsHide:true,stdio:'ignore'});expect(await new Promise(resolve=>second.on('exit',resolve))).toBe(0);
-  await until(()=>current.app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].isFocused()),10000,'Windows did not grant focus after the second launch');
+  await until(()=>current.app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].isFocused()),10000,'The operating system did not grant focus after the second launch');
   expect(await current.app.evaluate(({app,BrowserWindow})=>({count:BrowserWindow.getAllWindows().length,minimized:BrowserWindow.getAllWindows()[0].isMinimized(),backend:app.getAppMetrics().find(m=>m.name==='Codex HUD backend').pid}))).toEqual({count:1,minimized:false,backend});
   await current.app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].maximize());await until(()=>current.app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].isMaximized()));
   await current.app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].unmaximize());
@@ -77,5 +78,7 @@ test('suspend/resume and session-end handlers preserve opt-in and drain the owne
   current=await launch(await fixture(info.outputPath('data')));await ready(current);const before=await pids(current);
   await current.app.evaluate(({powerMonitor})=>powerMonitor.emit('suspend'));await pause(1200);await current.app.evaluate(({powerMonitor})=>powerMonitor.emit('resume'));await pause(1200);
   expect((await(await api(current,'/api/recorder')).json()).running).toBe(false);expect(status(current).events.some(e=>e.event==='resume')).toBe(true);
-  const closed=current.app.waitForEvent('close');await current.app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].emit('query-session-end',{}));await closed;await until(()=>before.every(pid=>!alive(pid)));await attachJSON(info,'simulated-power-events',{actualOSSleep:false,actualOSLogout:false,status:status(current)});current=null;
+  const closed=current.app.waitForEvent('close');
+  if(process.platform==='darwin')await current.app.evaluate(({powerMonitor})=>powerMonitor.emit('shutdown',{}));else await current.app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].emit('query-session-end',{}));
+  await closed;await until(()=>before.every(pid=>!alive(pid)));await attachJSON(info,'simulated-power-events',{actualOSSleep:false,actualOSLogout:false,status:status(current)});current=null;
 });

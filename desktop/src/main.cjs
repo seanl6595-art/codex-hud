@@ -3,16 +3,16 @@ const {app,BrowserWindow,WebContentsView,Menu,utilityProcess,session,protocol,ip
 const fs=require('node:fs'),path=require('node:path');
 const {preferences,readJSON,writeJSON,windowOptions,parseOptions}=require('./settings.cjs');
 const {SHELL_FILES,shellResource,localResource,trustedSender,protectContents,protectSession}=require('./security.cjs');
+const {desktopArguments,closeQuitsApplication,applicationMenu,createReopener}=require('./platform.cjs');
 const began=performance.now();
 const coreRoot=app.isPackaged?path.join(app.getAppPath(),'core'):path.resolve(__dirname,'../..');
 let options,argumentError;
 try{
-  // Electron removes most switches; Playwright's inspector switches may remain.
-  const args=process.argv.slice(app.isPackaged?1:2).filter(arg=>!/^--(?:inspect(?:-brk)?|remote-debugging-port)=/.test(arg));
-  options=parseOptions(args);
+  options=parseOptions(desktopArguments(process.argv,app.isPackaged));
 }catch(error){options={port:0};argumentError=error.message;}
 const profile=options.userData||path.join(app.getPath('appData'),'Codex HUD');
-app.setName('Codex HUD');app.setAppUserModelId('art.seanl6595.codex-hud.desktop');
+app.setName('Codex HUD');
+if(process.platform==='win32')app.setAppUserModelId('art.seanl6595.codex-hud.desktop');
 app.setPath('userData',profile);app.setPath('sessionData',path.join(profile,'browser'));
 app.setPath('crashDumps',path.join(profile,'crashes'));
 // Desktop has no updater, crash uploader, or remote resources.
@@ -22,7 +22,8 @@ const preferencesFile=path.join(profile,'preferences.json'),stateFile=path.join(
 let savedPreferences=preferences(readJSON(preferencesFile));
 let win,overlay,backend,origin,heartbeat,startTimer,viewTimer,stateTimer,backendExited=true;
 let quitting=false,failed=false,stopPromise;
-const diagnostic={version:require('../package.json').version,events:[],blocked:{navigation:0,request:0}};
+let closingWindow=false,windowClosePromise;
+const diagnostic={version:require('../package.json').version,platform:process.platform,arch:process.arch,mainPid:process.pid,events:[],blocked:{navigation:0,request:0}};
 function mark(event,extra={}){
   // Deliberately excludes paths, ports, tokens, source names and telemetry values.
   diagnostic.events.push({event,ms:Math.round(performance.now()-began),...extra});
@@ -46,10 +47,10 @@ function removeOverlay(){
   win.contentView.removeChildView(overlay);overlay.webContents.close();overlay=null;
 }
 async function shell(code='STARTING'){
-  if(quitting||!win||win.isDestroyed())return;
+  if(quitting||closingWindow||!win||win.isDestroyed())return;
   // Match the existing GUI's default, then follow its persisted language.
   const language=savedPreferences['codex-hud.language.v1']||'en';
-  const query=new URLSearchParams({code,lang:language});
+  const query=new URLSearchParams({code,lang:language,platform:process.platform});
   const url='codex-hud://shell/index.html?'+query;
   // Give the primary window a real document immediately, even if backend startup
   // fails. Only overlay it while the primary renderer loads its initial GUI.
@@ -67,7 +68,7 @@ async function shell(code='STARTING'){
   if(!win.isVisible()){win.show();mark('window-visible');flushDiagnostics();}
 }
 async function showFailure(code){
-  if(quitting)return;
+  if(quitting||closingWindow)return;
   failed=true;clearTimeout(startTimer);clearTimeout(viewTimer);mark('error',{code});flushDiagnostics();
   await shell(code);
 }
@@ -82,9 +83,8 @@ function stopBackend(reason){
   });
   return stopPromise;
 }
-async function shutdown(reason='window-close'){
-  if(quitting)return;
-  quitting=true;clearTimeout(stateTimer);saveWindow();mark('shutdown-requested',{reason});flushDiagnostics();
+async function drainWindow(reason){
+  clearTimeout(stateTimer);saveWindow();mark('shutdown-requested',{reason});flushDiagnostics();
   // Capture only the enumerated UI settings before stopping its server.
   if(win&&!win.isDestroyed()&&localResource(win.webContents.getURL(),origin)){
     try{const values=await Promise.race([win.webContents.executeJavaScript(`(()=>{const result={};for(const key of ${JSON.stringify(Object.keys(require('./settings.cjs').PREFERENCES))})result[key]=localStorage.getItem(key);return result})()`),new Promise(resolve=>setTimeout(()=>resolve(null),250))]);if(values)rememberPreferences(values);}catch{}
@@ -92,6 +92,22 @@ async function shutdown(reason='window-close'){
   await stopBackend(reason);
   mark('shutdown-complete',{backendExited});flushDiagnostics();
   if(overlay)removeOverlay();
+}
+async function closeMacWindow(){
+  if(windowClosePromise)return windowClosePromise;
+  closingWindow=true;
+  windowClosePromise=(async()=>{
+    await drainWindow('window-close');
+    if(win&&!win.isDestroyed())win.destroy();
+    win=null;origin=null;backend=null;backendExited=true;stopPromise=null;
+    mark('window-closed');flushDiagnostics();
+  })().finally(()=>{closingWindow=false;windowClosePromise=null;});
+  return windowClosePromise;
+}
+async function shutdown(reason='window-close'){
+  if(quitting)return;
+  quitting=true;
+  if(windowClosePromise)await windowClosePromise;else await drainWindow(reason);
   app.quit();
 }
 async function startBackend(){
@@ -104,13 +120,13 @@ async function startBackend(){
   backend.on('error',()=>void showFailure('BACKEND_START_FAILED'));
   backend.on('exit',code=>{
     backendExited=true;clearInterval(heartbeat);clearTimeout(startTimer);mark('backend-exit',{code});
-    if(!quitting&&!failed)void showFailure('BACKEND_EXITED');
+    if(!quitting&&!closingWindow&&!failed)void showFailure('BACKEND_EXITED');
   });
   backend.on('message',async message=>{
     if(message.event==='runtime'){diagnostic.runtime=message.runtime;return;}
     if(message.event==='stopped'){mark('backend-stopped',{durationMs:Math.round(message.ms),reason:message.reason});return;}
     if(message.event==='failure'){void showFailure(message.code);return;}
-    if(message.event==='ready'&&!quitting&&!failed){
+    if(message.event==='ready'&&!quitting&&!closingWindow&&!failed){
       clearTimeout(startTimer);
       try{
         const url=new URL(message.url);
@@ -118,7 +134,9 @@ async function startBackend(){
         const response=await fetch(url.origin+'/api/bootstrap',{signal:AbortSignal.timeout(5000)});
         const bootstrap=await response.json();
         if(!response.ok||bootstrap.apiVersion!==2)throw Error('Readiness failed');
+        if(quitting||closingWindow)return;
         origin=url.origin;mark('backend-ready');await shell();
+        if(quitting||closingWindow)return;
         viewTimer=setTimeout(()=>{mark('initial-view-delayed');void shell('GUI_WAIT_TIMEOUT');flushDiagnostics();},60000);
         await win.loadURL(origin);mark('gui-document-loaded');
       }catch{void showFailure('BACKEND_START_FAILED');void stopBackend('readiness-failed');}
@@ -128,17 +146,24 @@ async function startBackend(){
   startTimer=setTimeout(()=>{void showFailure('BACKEND_TIMEOUT');void stopBackend('startup-timeout');},20000);
 }
 app.on('before-quit',event=>{if(!quitting){event.preventDefault();void shutdown('app-quit');}});
+if(process.platform==='darwin')for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>void shutdown(signal));
+function focusWindow(window){
+  const focus=()=>{if(!window.isDestroyed()){window.show();window.moveTop();window.focus();}};
+  if(window.isMinimized()){window.once('restore',()=>setImmediate(focus));window.restore();}else focus();
+}
+const reopen=createReopener({isQuitting:()=>quitting,whenClosed:()=>windowClosePromise,getWindow:()=>win,createWindow,focus:focusWindow});
 app.on('second-instance',()=>{
   mark('second-instance');
-  if(win&&!win.isDestroyed()){
-    const focus=()=>{if(!win.isDestroyed()){win.show();win.moveTop();win.focus();}};
-    if(win.isMinimized()){win.once('restore',()=>setImmediate(focus));win.restore();}else focus();
-  }
+  if(app.isReady())void reopen().catch(()=>showFailure('BACKEND_START_FAILED'));
 });
+app.on('activate',()=>{if(process.platform==='darwin'&&app.isReady())void reopen().catch(()=>showFailure('BACKEND_START_FAILED'));});
+// Keep the macOS Dock application available after the red close button. Its
+// backend has already stopped; Dock activation starts a fresh opt-in session.
+app.on('window-all-closed',()=>{if(closeQuitsApplication(process.platform)&&!quitting)void shutdown('all-windows-closed');});
 if(!app.requestSingleInstanceLock())app.exit(0);
 else app.whenReady().then(async()=>{
   fs.mkdirSync(profile,{recursive:true});
-  Menu.setApplicationMenu(null);
+  const menu=applicationMenu(process.platform);Menu.setApplicationMenu(menu?Menu.buildFromTemplate(menu):null);
   session.defaultSession.protocol.handle('codex-hud',request=>{
     if(!shellResource(request.url))return new Response('Not found',{status:404});
     const file=new URL(request.url).pathname;
@@ -147,36 +172,41 @@ else app.whenReady().then(async()=>{
     try{return new Response(fs.readFileSync(local),{headers:{'Content-Type':{'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml'}[path.extname(local)],'Content-Security-Policy':"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",'Cache-Control':'no-store'}});}catch{return new Response('Unavailable',{status:404});}
   });
   protectSession(session.defaultSession,()=>origin,kind=>diagnostic.blocked[kind]++);
-  const bounds=windowOptions(readJSON(stateFile),screen.getAllDisplays(),screen.getPrimaryDisplay());
-  const {maximized,...geometry}=bounds;
-  win=new BrowserWindow({...geometry,show:false,title:'Codex HUD',backgroundColor:'#0c111b',icon:path.join(__dirname,'../assets/codex-hud.ico'),
-    webPreferences:{preload:path.join(__dirname,'preload.cjs'),additionalArguments:['--codex-hud-preferences='+encodeURIComponent(JSON.stringify(savedPreferences))],contextIsolation:true,nodeIntegration:false,sandbox:true,webSecurity:true,allowRunningInsecureContent:false,webviewTag:false,devTools:!app.isPackaged,spellcheck:false}});
-  if(maximized)win.maximize();
-  protectContents(win.webContents,()=>origin,kind=>diagnostic.blocked[kind]++);
-  win.webContents.on('render-process-gone',()=>{if(!quitting){void showFailure('RENDERER_EXITED');void stopBackend('renderer-exited');}});
-  win.webContents.on('did-fail-load',(_event,code,_description,_url,isMainFrame)=>{if(isMainFrame&&code!==-3&&!quitting){void showFailure('GUI_LOAD_FAILED');void stopBackend('gui-load-failed');}});
   ipcMain.on('codex-hud:ui',(event,message)=>{
-    if(!trustedSender(event,win.webContents,origin)||!message||!['ready','preferences'].includes(message.kind))return;
+    if(!win||win.isDestroyed()||!trustedSender(event,win.webContents,origin)||!message||!['ready','preferences'].includes(message.kind))return;
     rememberPreferences(message.preferences);
-    if(message.kind==='ready'&&!failed&&!quitting&&['data','missing','error'].includes(message.outcome)){
+    if(message.kind==='ready'&&!failed&&!quitting&&!closingWindow&&['data','missing','error'].includes(message.outcome)){
       clearTimeout(viewTimer);mark('dashboard-ready',{outcome:message.outcome});removeOverlay();flushDiagnostics();
     }
   });
-  for(const event of ['move','resize','maximize','unmaximize'])win.on(event,()=>{layoutOverlay();clearTimeout(stateTimer);stateTimer=setTimeout(saveWindow,200);});
-  win.on('close',event=>{if(!quitting){event.preventDefault();win.hide();void shutdown();}});
-  win.on('query-session-end',()=>{saveWindow();mark('query-session-end');void shutdown('session-end');});
-  win.on('session-end',()=>void shutdown('session-end'));
-  screen.on('display-removed',()=>{const next=windowOptions({...win.getNormalBounds(),maximized:win.isMaximized()},screen.getAllDisplays(),screen.getPrimaryDisplay());if(!win.isMaximized())win.setBounds({x:next.x,y:next.y,width:next.width,height:next.height});});
+  screen.on('display-removed',()=>{if(!win||win.isDestroyed())return;const next=windowOptions({...win.getNormalBounds(),maximized:win.isMaximized()},screen.getAllDisplays(),screen.getPrimaryDisplay());if(!win.isMaximized())win.setBounds({x:next.x,y:next.y,width:next.width,height:next.height});});
   powerMonitor.on('suspend',()=>{saveWindow();post({action:'heartbeat'});mark('suspend');flushDiagnostics();});
   powerMonitor.on('resume',()=>{
     post({action:'heartbeat'});mark('resume');flushDiagnostics();
-    // SWR's existing reconnect behavior refreshes reads; no recorder is started.
-    if(!failed&&origin)void win.webContents.executeJavaScript("window.dispatchEvent(new Event('online'))").catch(()=>{});
+    if(win&&!win.isDestroyed()&&!failed&&!closingWindow&&origin)void win.webContents.executeJavaScript("window.dispatchEvent(new Event('online'))").catch(()=>{});
   });
-  await shell();
-  if(argumentError){void showFailure('INVALID_ARGUMENTS');return;}
-  await startBackend();
+  powerMonitor.on('shutdown',()=>void shutdown('system-shutdown'));
+  await reopen();
 }).catch(()=>{
   mark('fatal-startup');flushDiagnostics();
   if(win&&!win.isDestroyed())void showFailure('BACKEND_START_FAILED');else app.exit(1);
 });
+async function createWindow(){
+  if(quitting)return;
+  failed=false;origin=null;backend=null;backendExited=true;stopPromise=null;
+  const bounds=windowOptions(readJSON(stateFile),screen.getAllDisplays(),screen.getPrimaryDisplay());
+  const {maximized,...geometry}=bounds;
+  win=new BrowserWindow({...geometry,show:false,title:'Codex HUD',backgroundColor:'#0c111b',icon:path.join(__dirname,process.platform==='darwin'?'../assets/icon-1024.png':'../assets/codex-hud.ico'),
+    webPreferences:{preload:path.join(__dirname,'preload.cjs'),additionalArguments:['--codex-hud-preferences='+encodeURIComponent(JSON.stringify(savedPreferences))],contextIsolation:true,nodeIntegration:false,sandbox:true,webSecurity:true,allowRunningInsecureContent:false,webviewTag:false,devTools:!app.isPackaged,spellcheck:false}});
+  if(maximized)win.maximize();
+  protectContents(win.webContents,()=>origin,kind=>diagnostic.blocked[kind]++);
+  win.webContents.on('render-process-gone',()=>{if(!quitting&&!closingWindow){void showFailure('RENDERER_EXITED');void stopBackend('renderer-exited');}});
+  win.webContents.on('did-fail-load',(_event,code,_description,_url,isMainFrame)=>{if(isMainFrame&&code!==-3&&!quitting&&!closingWindow){void showFailure('GUI_LOAD_FAILED');void stopBackend('gui-load-failed');}});
+  for(const event of ['move','resize','maximize','unmaximize'])win.on(event,()=>{layoutOverlay();clearTimeout(stateTimer);stateTimer=setTimeout(saveWindow,200);});
+  win.on('close',event=>{if(!quitting){event.preventDefault();win.hide();if(closeQuitsApplication(process.platform))void shutdown();else void closeMacWindow();}});
+  win.on('query-session-end',()=>{saveWindow();mark('query-session-end');void shutdown('session-end');});
+  win.on('session-end',()=>void shutdown('session-end'));
+  await shell();
+  if(argumentError){void showFailure('INVALID_ARGUMENTS');return;}
+  await startBackend();
+}

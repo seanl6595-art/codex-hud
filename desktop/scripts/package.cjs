@@ -16,7 +16,8 @@ async function createPackage(){
   const stamp=new Date().toISOString().replace(/[:.]/g,'-');
   const build=path.join(desktop,'out',pkg.version+'-'+stamp),stage=path.join(build,'stage');
   fs.mkdirSync(stage,{recursive:true});
-  for(const dir of ['src','ui','assets'])fs.cpSync(path.join(desktop,dir),path.join(stage,dir),{recursive:true});
+  for(const dir of ['src','ui'])fs.cpSync(path.join(desktop,dir),path.join(stage,dir),{recursive:true});
+  fs.mkdirSync(path.join(stage,'assets'));for(const file of ['codex-hud.ico','icon.svg'])fs.copyFileSync(path.join(desktop,'assets',file),path.join(stage,'assets',file));
   if(!fs.existsSync(path.join(stage,'assets/codex-hud.ico')))throw Error('Export the tracked icon with desktop/scripts/create-icon.ps1.');
   // Packager strips npm-only private metadata. The development package stays private.
   const appPackage={name:pkg.name,productName:'Codex HUD',version:pkg.version,description:pkg.description,author:pkg.author,license:pkg.license,main:'src/main.cjs'};

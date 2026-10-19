@@ -1,0 +1,88 @@
+name: macOS desktop internal preview
+on:
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - 'lib/**'
+      - 'gui/**'
+      - 'test/**'
+      - 'e2e/**'
+      - 'package*.json'
+      - '.github/workflows/macos-desktop.yml'
+  workflow_dispatch:
+    inputs:
+      retain_preview_artifacts:
+        description: 'Upload internal preview ZIP/DMG for review (public-repo artifacts are not private; requires approval)'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  native-mac:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      CODEX_HUD_DESKTOP_SOAK_SECONDS: '90'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.21.0'
+          architecture: ${{ matrix.arch }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+      - name: Require native matching architecture
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          node -e 'if(process.platform!=="darwin"||process.arch!==process.env.EXPECTED_ARCH)process.exit(1)'
+          test "$(sysctl -in sysctl.proc_translated 2>/dev/null || true)" != "1"
+      - run: npm ci
+      - run: npm ci --prefix desktop
+      - run: npm test
+      - run: npm run build:gui
+      - run: npm run test:desktop
+      - run: npm --prefix desktop run make:mac -- ${{ matrix.arch }}
+      - run: node desktop/scripts/verify-macos-artifacts.cjs
+      - run: npm --prefix desktop run test:runtime
+      - name: Relocate the actual ZIP outside the checkout
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          node <<'NODE'
+          const fs=require('fs'),path=require('path'),cp=require('child_process');
+          const preview=JSON.parse(fs.readFileSync(`desktop/out/macos/latest-${process.env.TARGET_ARCH}.json`));
+          const dir=path.join(process.env.RUNNER_TEMP,'hud-mac-'+process.env.TARGET_ARCH);
+          fs.mkdirSync(dir,{recursive:true});cp.execFileSync('/usr/bin/ditto',['-x','-k',preview.zip,dir]);
+          const app=path.join(dir,'Codex HUD.app');
+          fs.appendFileSync(process.env.GITHUB_ENV,`CODEX_HUD_DESKTOP_APP=${app}\nCODEX_HUD_DESKTOP_EXECUTABLE=${path.join(app,'Contents/MacOS/Codex HUD')}\nCODEX_HUD_DESKTOP_TEST_ROOT=${path.join(process.env.RUNNER_TEMP,'hud-evidence-'+process.env.TARGET_ARCH)}\n`);
+          NODE
+      - run: npm run test:desktop:native
+      - run: node desktop/scripts/macos-finder-smoke.cjs
+      - run: npx --no-install playwright install chrome
+      - run: npm run test:browser
+      - name: Preserve telemetry/accounting source
+        run: git diff --exit-code -- bin lib gui LICENSE NOTICE.md
+      - name: Retain preview only after explicit artifact approval
+        if: ${{ inputs.retain_preview_artifacts }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-hud-macos-${{ matrix.arch }}-internal
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            desktop/out/macos/**/codex-hud-desktop-*-internal.zip
+            desktop/out/macos/**/codex-hud-desktop-*-internal.dmg
+            desktop/out/macos/**/SHA256SUMS
+            desktop/out/macos/**/artifact-index.json
+      # No push, commit, tag, GitHub Release, Developer ID or notarization step.

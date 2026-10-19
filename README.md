@@ -17,6 +17,10 @@ SmartScreen may warn; keep system security protections enabled. See
 public preview; clean-VM validation is incomplete and macOS is not included.
 The CLI/browser beta below remains available unchanged.
 
+The [macOS desktop port](docs/MACOS-DESKTOP.md) is under internal development from
+the Windows desktop implementation. Native arm64/x64 validation is pending; the
+published desktop download above remains Windows only.
+
 ## Prerequisites
 
 - **Local Codex session telemetry is required.** Installing this tool does not provide Codex, a subscription or telemetry for remote-only sessions.

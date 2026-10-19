@@ -8,7 +8,7 @@ function verifyRuntime(coreRoot) {
     if(db.prepare('SELECT count(*) AS n FROM runtime_probe').get().n!==0)throw new Error('SQLite rollback failed.');
     db.exec('BEGIN IMMEDIATE; INSERT INTO runtime_probe VALUES (2); COMMIT;');
     if(db.prepare('SELECT n FROM runtime_probe').get().n!==2)throw new Error('SQLite commit failed.');
-    return {node:process.versions.node,electron:process.versions.electron,sqlite:process.versions.sqlite,transactions:true};
+    return {node:process.versions.node,electron:process.versions.electron,sqlite:process.versions.sqlite,platform:process.platform,arch:process.arch,transactions:true};
   } finally {db.close();}
 }
 module.exports={verifyRuntime};

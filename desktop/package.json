@@ -12,10 +12,16 @@
     "test:native": "playwright test --config playwright.config.cjs",
     "make": "node scripts/package.cjs",
     "test:runtime": "node scripts/runtime-tests.cjs",
-    "measure": "node scripts/measure.cjs"
+    "measure": "node scripts/measure.cjs",
+    "make:mac": "node scripts/package-macos.cjs",
+    "icon:mac": "node scripts/create-mac-icon.cjs"
   },
-  "engines": { "node": ">=24.21.0" },
+  "engines": {
+    "node": ">=24.21.0"
+  },
   "devDependencies": {
+    "@electron-forge/core": "8.0.1",
+    "@electron-forge/maker-zip": "8.0.1",
     "@electron/packager": "20.3.0",
     "@playwright/test": "1.64.1",
     "electron": "44.9.0"

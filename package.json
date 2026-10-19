@@ -17,7 +17,8 @@
     "desktop": "npm --prefix desktop start",
     "test:desktop": "npm --prefix desktop test",
     "test:desktop:native": "npm --prefix desktop run test:native",
-    "build:desktop": "npm run build:gui && npm --prefix desktop run make"
+    "build:desktop": "npm run build:gui && npm --prefix desktop run make",
+    "build:desktop:mac": "npm run build:gui && npm --prefix desktop run make:mac"
   },
   "engines": {
     "node": ">=24.21.0"
@@ -38,7 +39,8 @@
     "docs/RELEASE-NOTES-v1.3.0-beta.1.md",
     "docs/RELEASE-CANDIDATE.md",
     "docs/BETA-TESTING.md",
-    "docs/DESKTOP.md"
+    "docs/DESKTOP.md",
+    "docs/MACOS-DESKTOP.md"
   ],
   "keywords": [
     "codex",
