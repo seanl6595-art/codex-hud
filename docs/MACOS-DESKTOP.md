@@ -95,8 +95,14 @@ database, debug logs or Node sidecar enter the app. Original MIT/upstream,
 Electron/Chromium and frontend notices are retained inside the bundle.
 
 The bundle ID is `art.seanl6595.codex-hud.desktop`; its executable and display name
-are `Codex HUD`. Numeric Apple bundle versions use `1.3.0`; the app's internal
-preview package metadata remains `1.3.0-desktop.1`. The branded SVG is exported to
+are `Codex HUD`. Apple `CFBundleShortVersionString` and `CFBundleVersion`, and
+Packager's runtime `package.json.version`, use `1.3.0`. The source desktop package
+version stays `1.3.0-desktop.1`; that complete preview identity is retained explicitly
+as `package.json.codexHudReleaseVersion` and `Info.plist.CodexHUDReleaseVersion`.
+Packaging strictly compares the complete expected application metadata and checks
+all three plist version fields; the mounted DMG checks them again. Archive names,
+checksums and manifest `version` retain the full preview identity, while manifest
+`bundleVersion` records the numeric Apple version. The branded SVG is exported to
 a tracked 1024-pixel PNG; macOS `sips` and `iconutil` generate the ICNS at build time.
 The minimum system version is read from the actual Electron bundle, not guessed.
 

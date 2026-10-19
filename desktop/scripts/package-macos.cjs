@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),assert=require('node:assert/strict'),{execFileSync,spawnSync}=require('node:child_process');
 const {assertSafeNames}=require('./package.cjs');
 const {createMacIcon}=require('./create-mac-icon.cjs');
-const {createMacForgeConfig,bundleID}=require('../forge.macos.cjs');
+const {createMacForgeConfig,bundleID,bundleVersion,releaseVersion}=require('../forge.macos.cjs');
 const desktop=path.resolve(__dirname,'..'),repo=path.resolve(desktop,'..');
 const pkg=require('../package.json'),core=require('../../package.json');
 const hash=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -25,7 +25,9 @@ function stageMacApplication(stage,electronDist=path.join(desktop,'node_modules/
     fs.copyFileSync(license,path.join(stage,destination));
   }
   fs.copyFileSync(path.join(desktop,'MACOS-INTERNAL-README.txt'),path.join(stage,'PORTABLE-README.txt'));
-  const appPackage={name:pkg.name,productName:'Codex HUD',version:pkg.version,description:'Codex HUD macOS internal desktop preview',author:pkg.author,license:pkg.license,main:pkg.main};
+  // Packager writes appVersion into package.json. Keep that numeric runtime
+  // version separate from the complete preview release identity.
+  const appPackage={name:pkg.name,productName:'Codex HUD',version:bundleVersion,codexHudReleaseVersion:releaseVersion,description:'Codex HUD macOS internal desktop preview',author:pkg.author,license:pkg.license,main:pkg.main};
   // Forge requires an Electron build dependency to select its exact runtime.
   // It exists only in staging metadata and is removed by afterCopy.
   fs.writeFileSync(path.join(stage,'package.json'),JSON.stringify({...appPackage,devDependencies:{electron:pkg.devDependencies.electron}},null,2)+'\n');
@@ -46,6 +48,8 @@ async function createMacPackage(arch=process.arch){
   for(const row of manifest)assert.equal(hash(path.join(appRoot,row.file)),row.sha256,row.file);
   assertSafeNames(files(appRoot).map(file=>path.relative(appRoot,file)));
   assert.equal(plist(app,'CFBundleIdentifier'),bundleID);assert.equal(plist(app,'CFBundleExecutable'),'Codex HUD');
+  assert.equal(plist(app,'CFBundleShortVersionString'),bundleVersion);assert.equal(plist(app,'CFBundleVersion'),bundleVersion);
+  assert.equal(plist(app,'CodexHUDReleaseVersion'),releaseVersion);
   const executable=path.join(app,'Contents/MacOS/Codex HUD');
   const binaryArch=execFileSync('/usr/bin/lipo',['-archs',executable],{encoding:'utf8'}).trim();assert.equal(binaryArch,arch==='x64'?'x86_64':'arm64');
   execFileSync('/usr/bin/codesign',['--verify','--deep','--strict',app],{stdio:'pipe'});
@@ -60,8 +64,8 @@ async function createMacPackage(arch=process.arch){
   const dmg=path.join(build,`codex-hud-desktop-${pkg.version}-macos-${arch}-internal.dmg`);
   execFileSync('/usr/bin/hdiutil',['create','-volname','Codex HUD Internal Preview','-srcfolder',volume,'-format','UDZO',dmg],{stdio:'pipe'});execFileSync('/usr/bin/hdiutil',['verify',dmg],{stdio:'pipe'});
   const artifacts=[zip,dmg].map(file=>({file,bytes:fs.statSync(file).size,sha256:hash(file)}));fs.writeFileSync(path.join(build,'SHA256SUMS'),artifacts.map(row=>row.sha256+'  '+path.basename(row.file)).join('\n')+'\n');
-  const result={version:pkg.version,platform:'darwin',arch,app,executable,zip,dmg,artifacts,build,resources,sourceManifest:manifest,bundleID,minimumSystemVersion:plist(app,'LSMinimumSystemVersion'),signing:'ad-hoc internal signature verified; no Developer ID',notarization:'not requested',nativeRuntimeValidation:'pending separate test commands',forge:pkg.devDependencies['@electron-forge/core']};
-  fs.writeFileSync(path.join(build,'artifact-index.json'),JSON.stringify({version:result.version,platform:'darwin',arch,bundleID,minimumSystemVersion:result.minimumSystemVersion,signing:result.signing,notarization:result.notarization,nativeRuntimeValidation:result.nativeRuntimeValidation,artifacts:artifacts.map(({file,...row})=>({name:path.basename(file),...row})),sourceManifest:manifest},null,2)+'\n');
+  const result={version:releaseVersion,bundleVersion,platform:'darwin',arch,app,executable,zip,dmg,artifacts,build,resources,sourceManifest:manifest,bundleID,minimumSystemVersion:plist(app,'LSMinimumSystemVersion'),signing:'ad-hoc internal signature verified; no Developer ID',notarization:'not requested',nativeRuntimeValidation:'pending separate test commands',forge:pkg.devDependencies['@electron-forge/core']};
+  fs.writeFileSync(path.join(build,'artifact-index.json'),JSON.stringify({version:result.version,bundleVersion,platform:'darwin',arch,bundleID,minimumSystemVersion:result.minimumSystemVersion,signing:result.signing,notarization:result.notarization,nativeRuntimeValidation:result.nativeRuntimeValidation,artifacts:artifacts.map(({file,...row})=>({name:path.basename(file),...row})),sourceManifest:manifest},null,2)+'\n');
   fs.writeFileSync(path.join(build,'manifest.json'),JSON.stringify(result,null,2)+'\n');fs.writeFileSync(path.join(desktop,`out/macos/latest-${arch}.json`),JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result,null,2));return result;
 }
 if(require.main===module)createMacPackage(process.argv[2]||process.arch).catch(error=>{console.error(error.message);process.exitCode=1});
