@@ -49,8 +49,8 @@ jobs:
           test "$(sysctl -in sysctl.proc_translated 2>/dev/null || true)" != "1"
       - run: npm ci
       - run: npm ci --prefix desktop
-      - run: npm test
       - run: npm run build:gui
+      - run: npm test
       - run: npm run test:desktop
       - run: npm --prefix desktop run make:mac -- ${{ matrix.arch }}
       - run: node desktop/scripts/verify-macos-artifacts.cjs
