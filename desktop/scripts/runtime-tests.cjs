@@ -1,0 +1,12 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),{spawn}=require('node:child_process');
+const repo=path.resolve(__dirname,'../..');
+const latest=JSON.parse(fs.readFileSync(path.join(__dirname,'../out/latest.json'),'utf8'));
+const exe=process.env.CODEX_HUD_DESKTOP_EXECUTABLE||latest.executable;
+const tests=fs.readdirSync(path.join(repo,'test')).filter(file=>file.endsWith('.test.js')).map(file=>path.join(repo,'test',file));
+const resultDir=path.join(__dirname,'../test-results');fs.mkdirSync(resultDir,{recursive:true});
+const log=fs.createWriteStream(path.join(resultDir,'electron-runtime.log'));
+const child=spawn(exe,['--test',...tests],{cwd:repo,env:{...process.env,ELECTRON_RUN_AS_NODE:'1'},windowsHide:true,stdio:['ignore','pipe','pipe']});
+child.stdout.pipe(log);child.stderr.pipe(log);
+child.on('error',error=>{console.error(error);process.exitCode=1;});
+child.on('exit',code=>{log.end();console.log('Existing accounting/runtime suite under packaged Electron Node mode:',code===0?'PASS':'FAIL');process.exitCode=code||0;});

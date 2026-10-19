@@ -8,6 +8,15 @@ Codex HUD is a local terminal tool for browsing Codex sessions, watching token t
 
 Version **1.3.0-beta.1** is a controlled public beta adding a GUI preview and verified historical accounting to the existing HUD, Recorder and Stats commands. It is for testing and feedback, with no guarantee of complete stability. The stable v1.2.0 release remains unchanged. It is based on and derived from **[codex-usage-monitor by harveyxiacn](https://github.com/harveyxiacn/codex-usage-monitor)**. The original MIT copyright is preserved; see [NOTICE.md](NOTICE.md) for upstream attribution and later modifications, and [LICENSE](LICENSE) for the license.
 
+**Windows desktop preview:** [v1.3.0-desktop.1](https://github.com/seanl6595-art/codex-hud/releases/tag/v1.3.0-desktop.1)
+provides a portable Windows x64 app with a native window and managed local backend.
+Download the ZIP, extract it entirely, and double-click `CodexHUD.exe`. No Node
+installation or PowerShell commands are needed. The executable is unsigned and
+SmartScreen may warn; keep system security protections enabled. See
+[installation, privacy, updates and troubleshooting](docs/DESKTOP.md). This is a
+public preview; clean-VM validation is incomplete and macOS is not included.
+The CLI/browser beta below remains available unchanged.
+
 ## Prerequisites
 
 - **Local Codex session telemetry is required.** Installing this tool does not provide Codex, a subscription or telemetry for remote-only sessions.

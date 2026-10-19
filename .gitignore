@@ -48,3 +48,10 @@ docs/local-*
 playwright-report/
 test-results/
 .gui-preview/
+
+# Desktop packaging, private profiles and disposable native-test evidence
+desktop/out/
+desktop/.npm-cache/
+desktop/.electron-cache/
+desktop/test-results/
+desktop/playwright-report/

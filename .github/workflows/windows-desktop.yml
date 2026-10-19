@@ -1,0 +1,39 @@
+name: Windows desktop preview validation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.21.0'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+      - run: npm ci
+      - run: npm ci --prefix desktop
+      - run: npm test
+      - run: npm run test:desktop
+      - run: npm run build:desktop
+      - run: npm --prefix desktop run test:runtime
+      - run: npx --no-install playwright install chrome
+      - run: npm run test:browser
+      - name: Extract the actual ZIP outside the checkout
+        shell: pwsh
+        run: |
+          $preview = Get-Content desktop/out/latest.json -Raw | ConvertFrom-Json
+          $destination = Join-Path $env:RUNNER_TEMP 'hud-preview'
+          Expand-Archive -LiteralPath $preview.zip -DestinationPath $destination
+          $executable = Join-Path $destination 'Codex HUD-win32-x64/CodexHUD.exe'
+          "CODEX_HUD_DESKTOP_EXECUTABLE=$executable" >> $env:GITHUB_ENV
+          "CODEX_HUD_DESKTOP_TEST_ROOT=$(Join-Path $env:RUNNER_TEMP 'hud-evidence')" >> $env:GITHUB_ENV
+      - run: npm run test:desktop:native
+      - name: Require unchanged core application sources
+        run: git diff --exit-code -- bin lib gui
+      # Deliberately no release, upload, signing, installer or publishing action.

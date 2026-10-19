@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.3.0-desktop.1] - 2026-10-19 (Windows desktop pre-release)
+
+- Add a separate Windows x64 portable Electron target using the existing GUI,
+  local backend, SQLite Recorder and historical accounting; no separate Node
+  installation is needed by desktop users.
+- Add a native title bar and application icon, loading/error screens, owned
+  backend lifecycle, single-instance restore/focus, window-state persistence and
+  persistent English/Simplified Chinese preferences.
+- Preserve loopback authentication, Host/Origin protections, renderer sandbox and
+  context isolation. Recorder stays opt-in; opening the app never creates or
+  migrates telemetry history. Existing CLI/browser runtime sources are unchanged.
+- Add maintained desktop, runtime and native lifecycle tests, explicit portable
+  packaging/privacy checks, license inclusion and SHA256SUMS generation.
+- Make one existing provenance fixture's same-size rewrite observable on Windows;
+  retain its original assertion and all production accounting/cache behavior.
+- Publish an unsigned public preview only. SmartScreen may warn; clean-VM and
+  native macOS validation remain incomplete. No installer, updater or npm release.
+
 ## [1.3.0-beta.1] - 2026-10-18 (public beta)
 
 ### Added

@@ -55,7 +55,12 @@ test('provenance: persisted evidence survives source deletion; legacy unknown re
 test('provenance: legacy reads verify archived copies and reject rewritten prefixes',async t=>{
  const f=await setup(t,[token(null),measurement()],{legacy:true});const archive=path.join(f.home,'archived_sessions');fs.mkdirSync(archive);fs.renameSync(f.file,path.join(archive,'moved.jsonl'));complete(f.stats());
  fs.appendFileSync(path.join(archive,'moved.jsonl'),'\n');complete(f.stats());
- const source=path.join(archive,'moved.jsonl');fs.writeFileSync(source,fs.readFileSync(source,'utf8').replace('26106','26107'));
+ const source=path.join(archive,'moved.jsonl'),beforeRewrite=fs.statSync(source);fs.writeFileSync(source,fs.readFileSync(source,'utf8').replace('26106','26107'));
+ // Snapshot verification evicts observable file changes. Windows can coalesce
+ // consecutive same-size writes into an identical metadata stamp; make this
+ // fixture's change observable. Hidden-stamp mutations have separate fresh-audit
+ // coverage in history-verification.test.js; no accounting assertion is relaxed.
+ fs.utimesSync(source,beforeRewrite.atime,new Date(beforeRewrite.mtimeMs+1000));
  assert.equal(f.stats().totals.input.complete,false);
 });
 test('provenance: matching copies may recover; conflicting copies never override authenticated history',async t=>{
