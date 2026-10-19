@@ -49,6 +49,8 @@ jobs:
           test "$(sysctl -in sysctl.proc_translated 2>/dev/null || true)" != "1"
       - run: npm ci
       - run: npm ci --prefix desktop
+      - name: Install pinned native Electron distribution
+        run: node desktop/node_modules/electron/install.js
       - run: npm run build:gui
       - run: npm test
       - run: npm run test:desktop

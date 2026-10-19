@@ -76,6 +76,7 @@ On a matching native Mac with Node >=24.21.0 for development only:
 ```sh
 npm ci
 npm ci --prefix desktop
+node desktop/node_modules/electron/install.js
 npm run build:gui
 npm --prefix desktop run make:mac -- arm64  # Apple Silicon host
 # On a separate native Intel host, use x64 instead.
@@ -83,6 +84,8 @@ npm --prefix desktop run make:mac -- arm64  # Apple Silicon host
 
 The build rejects Windows/Linux, mismatched CPU targets and Rosetta execution.
 It does not create an unvalidated cross-build and call it native support.
+Electron 44 downloads its binary lazily; the explicit installer above provisions
+the pinned native distribution and license notices before staging the application.
 
 `desktop/forge.macos.cjs` configures Forge **8.0.1** and its ZIP maker with a
 virtual configuration registered through Forge's public API. An explicit staging
