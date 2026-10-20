@@ -1,0 +1,138 @@
+name: macOS desktop internal preview
+on:
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - 'lib/**'
+      - 'gui/**'
+      - 'test/**'
+      - 'e2e/**'
+      - 'package*.json'
+      - '.github/workflows/macos-desktop.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  native-mac:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+            os: '15'
+          - runner: macos-15-intel
+            arch: x64
+            os: '15'
+          - runner: macos-26
+            arch: arm64
+            os: '26'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      CODEX_HUD_DESKTOP_SOAK_SECONDS: '90'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Bind the tested/retained bytes to the explicitly approved source head.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.21.0'
+          architecture: ${{ matrix.arch }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+      - name: Require native matching architecture
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+          EXPECTED_MACOS: ${{ matrix.os }}
+        run: |
+          node -e 'if(process.platform!=="darwin"||process.arch!==process.env.EXPECTED_ARCH)process.exit(1)'
+          test "$(sysctl -in sysctl.proc_translated 2>/dev/null || true)" != "1"
+          test "$(sw_vers -productVersion | cut -d. -f1)" = "$EXPECTED_MACOS"
+          sw_vers
+          uname -m
+      - run: npm ci
+      - run: npm ci --prefix desktop
+      - name: Install pinned native Electron distribution
+        run: node desktop/node_modules/electron/install.js
+      - run: npm run build:gui
+      - run: npm test
+      - run: npm run test:desktop
+      - run: npm --prefix desktop run make:mac -- ${{ matrix.arch }}
+      - name: Gate signatures and launch final ZIP and DMG with embedded runtime, native suites and LaunchServices
+        run: node desktop/scripts/verify-macos-artifacts.cjs
+      - run: npx --no-install playwright install chrome
+      - run: npm run test:browser
+      - name: Preserve telemetry/accounting source
+        run: git diff --exit-code -- bin lib gui LICENSE NOTICE.md
+      - name: Stage only verified files for the one-time physical MacBook test
+        id: retained
+        # A current full-SHA label (47 characters) authorizes this one delivery.
+        # Read live approval so capacity retries work and revocation is effective.
+        # No fork, other PR/branch or macOS 26 job may upload binaries.
+        if: >-
+          ${{ success() && matrix.runner == 'macos-15' && matrix.arch == 'arm64' &&
+          github.event_name == 'pull_request' &&
+          github.repository == 'seanl6595-art/codex-hud' && github.event.pull_request.number == 1 &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.event.pull_request.head.ref == 'codex/macos-desktop-port' }}
+        env:
+          APPROVED_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+          APPROVED_RUNNER: ${{ matrix.runner }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node <<'NODE'
+          const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),assert=require('node:assert/strict'),cp=require('node:child_process');
+          const source=cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
+          assert.equal(source,process.env.APPROVED_SOURCE_SHA);assert.equal(process.platform,'darwin');assert.equal(process.arch,'arm64');
+          const approvalLabel='mac-ok-'+source;
+          const current=JSON.parse(cp.execFileSync('gh',['api','repos/'+process.env.GITHUB_REPOSITORY+'/pulls/1'],{encoding:'utf8'}));
+          if(current.state!=='open'||current.head.sha!==source||current.head.repo.full_name!==process.env.GITHUB_REPOSITORY||current.head.ref!=='codex/macos-desktop-port'||!current.labels.some(label=>label.name===approvalLabel)){
+            console.log('No current exact-source approval; artifact retention skipped.');process.exit(0);
+          }
+          const latest=JSON.parse(fs.readFileSync('desktop/out/macos/latest-arm64.json','utf8'));
+          const read=name=>JSON.parse(fs.readFileSync(path.join(latest.build,name),'utf8'));
+          const index=read('artifact-index.json'),validated=read('validated-internal.json'),report=read('artifact-verification.json'),signatures=read('packaged-signatures.json');
+          assert.deepEqual(validated.report,report);assert.deepEqual(validated.artifacts,latest.artifacts);
+          assert.equal(report.osVersion.split('.')[0],'15');assert.equal(report.arch,'arm64');assert.equal(report.artifactHashesVerified,true);
+          assert.match(index.nativeRuntimeValidation,/^passed for final ZIP and DMG on 15\./);
+          assert.deepEqual(report.containers.map(row=>row.container),['zip','dmg']);
+          for(const row of report.containers)for(const key of ['signatureGatePassed','sourceResourcesMatched','embeddedNodeSuitePassed','nativeSQLiteRecorderWorkersRendererSuitePassed','launchServicesPassed'])assert.equal(row[key],true,key);
+          // codesign canonicalizes /var to /private/var in temporary copies.
+          // Compare all signature data except its displayed absolute location.
+          const comparable=value=>({...value,binaries:value.binaries.map(row=>({...row,details:row.details.replace(/^Executable=.*\n/m,'')}))});
+          for(const container of ['zip','dmg'])assert.deepEqual(comparable(read('validation/'+container+'/signatures.json')),comparable(signatures));
+          assert.equal(latest.artifacts.length,2);const artifacts=latest.artifacts.map(row=>{
+            const name=path.basename(row.file);assert.match(name,/^codex-hud-desktop-[\w.-]+-macos-arm64-internal\.(zip|dmg)$/);
+            const sha256=crypto.createHash('sha256').update(fs.readFileSync(row.file)).digest('hex');assert.equal(sha256,row.sha256,name);assert.equal(fs.statSync(row.file).size,row.bytes);
+            return{name,bytes:row.bytes,sha256};
+          });
+          assert.deepEqual(artifacts,index.artifacts);
+          const sums=fs.readFileSync(path.join(latest.build,'SHA256SUMS'),'utf8');assert.equal(sums,artifacts.map(row=>row.sha256+'  '+row.name).join('\n')+'\n');
+          const directory=path.join(process.env.RUNNER_TEMP,'hud-approved-arm64');fs.mkdirSync(directory);
+          for(const row of latest.artifacts)fs.copyFileSync(row.file,path.join(directory,path.basename(row.file)));
+          fs.writeFileSync(path.join(directory,'SHA256SUMS'),sums);
+          // These manifests contain only build metadata, code hashes and check
+          // results. Never copy raw logs, profiles, fixtures or databases.
+          for(const [name,value]of [['artifact-index.json',index],['validation.json',report],['signatures.json',signatures]])fs.writeFileSync(path.join(directory,name),JSON.stringify(value,null,2)+'\n');
+          const provenance={repository:process.env.GITHUB_REPOSITORY,sourceCommit:source,pullRequest:1,runId:process.env.GITHUB_RUN_ID,runAttempt:process.env.GITHUB_RUN_ATTEMPT,job:process.env.GITHUB_JOB,runner:process.env.APPROVED_RUNNER,arch:process.arch,approvalLabel,approvalCheckedAt:new Date().toISOString(),retentionDays:7,browserVerificationPassed:true,artifacts};
+          fs.writeFileSync(path.join(directory,'provenance.json'),JSON.stringify(provenance,null,2)+'\n');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,'directory='+directory+'\n');
+          console.log(JSON.stringify(provenance,null,2));
+          NODE
+      - name: Retain approved arm64 candidate for at most seven days
+        if: ${{ success() && steps.retained.outputs.directory != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-hud-${{ matrix.runner }}-${{ matrix.arch }}-internal
+          retention-days: 7
+          if-no-files-found: error
+          # Default overwrite=false also prevents replacing an already delivered
+          # artifact in this run. Remove the approval label after verification.
+          compression-level: 0
+          path: ${{ steps.retained.outputs.directory }}/*
+      # No push, commit, tag, GitHub Release, Developer ID or notarization step.

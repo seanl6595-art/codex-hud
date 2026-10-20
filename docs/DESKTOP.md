@@ -1,5 +1,8 @@
 # Windows desktop preview
 
+For the separate internal macOS port, see [macOS desktop preparation](MACOS-DESKTOP.md).
+The published Windows release and its assets are unchanged.
+
 The separate `desktop/` target packages the existing Codex HUD GUI and backend in
 Electron 44.9.0. Its embedded Node 24.22.0 meets the existing >=24.21.0 requirement.
 The CLI package remains `1.3.0-beta.1`; the desktop preview is
