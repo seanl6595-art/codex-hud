@@ -3,6 +3,7 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const {assertSafeNames}=require('./package.cjs');
 const {createMacIcon}=require('./create-mac-icon.cjs');
 const {createMacForgeConfig,bundleID,bundleVersion,releaseVersion}=require('../forge.macos.cjs');
+const {inspectMacSignatures}=require('./inspect-macos-signatures.cjs');
 const desktop=path.resolve(__dirname,'..'),repo=path.resolve(desktop,'..');
 const pkg=require('../package.json'),core=require('../../package.json');
 const hash=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -52,7 +53,8 @@ async function createMacPackage(arch=process.arch){
   assert.equal(plist(app,'CodexHUDReleaseVersion'),releaseVersion);
   const executable=path.join(app,'Contents/MacOS/Codex HUD');
   const binaryArch=execFileSync('/usr/bin/lipo',['-archs',executable],{encoding:'utf8'}).trim();assert.equal(binaryArch,arch==='x64'?'x86_64':'arm64');
-  execFileSync('/usr/bin/codesign',['--verify','--deep','--strict',app],{stdio:'pipe'});
+  const signatures=inspectMacSignatures(app);fs.writeFileSync(path.join(build,'packaged-signatures.json'),JSON.stringify(signatures,null,2)+'\n');
+  console.log('Packaged signature/entitlement gate:',JSON.stringify(signatures));
   for(const file of ['LICENSE','NOTICE.md','ELECTRON-LICENSE.txt','CHROMIUM-LICENSES.html','core/dist/gui/THIRD-PARTY-NOTICES.md'])assert.ok(fs.existsSync(path.join(appRoot,file)),file);
   const madeZip=made.flatMap(result=>result.artifacts).find(file=>file.endsWith('.zip'));assert.ok(madeZip,'Forge ZIP is missing');
   const zip=path.join(build,`codex-hud-desktop-${pkg.version}-macos-${arch}-internal.zip`);fs.copyFileSync(madeZip,zip);

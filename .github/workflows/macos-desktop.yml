@@ -25,10 +25,15 @@ jobs:
         include:
           - runner: macos-15
             arch: arm64
+            os: '15'
           - runner: macos-15-intel
             arch: x64
+            os: '15'
+          - runner: macos-26
+            arch: arm64
+            os: '26'
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       CODEX_HUD_DESKTOP_SOAK_SECONDS: '90'
     steps:
@@ -44,9 +49,13 @@ jobs:
       - name: Require native matching architecture
         env:
           EXPECTED_ARCH: ${{ matrix.arch }}
+          EXPECTED_MACOS: ${{ matrix.os }}
         run: |
           node -e 'if(process.platform!=="darwin"||process.arch!==process.env.EXPECTED_ARCH)process.exit(1)'
           test "$(sysctl -in sysctl.proc_translated 2>/dev/null || true)" != "1"
+          test "$(sw_vers -productVersion | cut -d. -f1)" = "$EXPECTED_MACOS"
+          sw_vers
+          uname -m
       - run: npm ci
       - run: npm ci --prefix desktop
       - name: Install pinned native Electron distribution
@@ -55,36 +64,19 @@ jobs:
       - run: npm test
       - run: npm run test:desktop
       - run: npm --prefix desktop run make:mac -- ${{ matrix.arch }}
-      - run: node desktop/scripts/verify-macos-artifacts.cjs
-      - run: npm --prefix desktop run test:runtime
-      - name: Relocate the actual ZIP outside the checkout
-        env:
-          TARGET_ARCH: ${{ matrix.arch }}
-        run: |
-          node <<'NODE'
-          const fs=require('fs'),path=require('path'),cp=require('child_process');
-          const preview=JSON.parse(fs.readFileSync(`desktop/out/macos/latest-${process.env.TARGET_ARCH}.json`));
-          const dir=path.join(process.env.RUNNER_TEMP,'hud-mac-'+process.env.TARGET_ARCH);
-          fs.mkdirSync(dir,{recursive:true});cp.execFileSync('/usr/bin/ditto',['-x','-k',preview.zip,dir]);
-          const app=path.join(dir,'Codex HUD.app');
-          fs.appendFileSync(process.env.GITHUB_ENV,`CODEX_HUD_DESKTOP_APP=${app}\nCODEX_HUD_DESKTOP_EXECUTABLE=${path.join(app,'Contents/MacOS/Codex HUD')}\nCODEX_HUD_DESKTOP_TEST_ROOT=${path.join(process.env.RUNNER_TEMP,'hud-evidence-'+process.env.TARGET_ARCH)}\n`);
-          NODE
-      - run: npm run test:desktop:native
-      - run: node desktop/scripts/macos-finder-smoke.cjs
+      - name: Gate signatures and launch final ZIP and DMG with embedded runtime, native suites and LaunchServices
+        run: node desktop/scripts/verify-macos-artifacts.cjs
       - run: npx --no-install playwright install chrome
       - run: npm run test:browser
       - name: Preserve telemetry/accounting source
         run: git diff --exit-code -- bin lib gui LICENSE NOTICE.md
       - name: Retain preview only after explicit artifact approval
-        # Remove the temporary PR label after the approved first-attempt run.
+        # PR runs never distribute binaries. A new manual dispatch is required.
         if: >-
-          ${{ success() && github.run_attempt == '1' &&
-          (inputs.retain_preview_artifacts ||
-          (github.event_name == 'pull_request' && github.event.pull_request.number == 1 &&
-          contains(github.event.pull_request.labels.*.name, format('macos-internal-artifacts-approved-{0}', matrix.arch)))) }}
+          ${{ success() && github.event_name == 'workflow_dispatch' && inputs.retain_preview_artifacts }}
         uses: actions/upload-artifact@v4
         with:
-          name: codex-hud-macos-${{ matrix.arch }}-internal
+          name: codex-hud-${{ matrix.runner }}-${{ matrix.arch }}-internal
           retention-days: 7
           if-no-files-found: error
           # Build outputs are one level below macos/. Never traverse the DMG
@@ -94,4 +86,5 @@ jobs:
             desktop/out/macos/*-${{ matrix.arch }}-*/codex-hud-desktop-*-macos-${{ matrix.arch }}-internal.dmg
             desktop/out/macos/*-${{ matrix.arch }}-*/SHA256SUMS
             desktop/out/macos/*-${{ matrix.arch }}-*/artifact-index.json
+            desktop/out/macos/*-${{ matrix.arch }}-*/validated-internal.json
       # No push, commit, tag, GitHub Release, Developer ID or notarization step.

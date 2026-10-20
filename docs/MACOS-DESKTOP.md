@@ -178,8 +178,35 @@ or genuinely Node-free clean-machine validation.
 
 ## Signing, notarization and the public Beta gate
 
-Internal builds are configured for **ad-hoc signing only**, followed by strict
-signature-integrity verification. This is not Developer ID author identity,
+Internal builds use **ad-hoc signing**, Hardened Runtime, and an explicit per-file
+entitlement policy in `desktop/macos-signing.cjs`. Main and Electron helper
+processes receive `allow-jit` and `disable-library-validation`: ad-hoc signatures
+have no Team ID with which to satisfy same-team library validation. Frameworks,
+dylibs and the standalone crash handler receive no process entitlements. Modern
+Electron does not need `allow-unsigned-executable-memory` for this application.
+No audio, camera, location, debugger, DYLD environment or other exceptions are added.
+
+The separate `developer-id` policy requires an explicit Developer ID Application
+identity, enables identity validation and secure timestamps, and grants JIT only
+to Electron processes. It keeps library validation enabled; all bundled code must
+be re-signed with the same actual Team ID. It is prepared configuration, not a
+performed Developer ID/notarization release.
+
+The native gate checks every real Mach-O executable/library, the bundle seal,
+runtime flags, identity/Team ID and exact entitlements before launching anything.
+It extracts the final ZIP and copies the final read-only mounted DMG application
+outside the checkout. **Both copies** run the existing embedded Electron Node
+suite, full native SQLite/Recorder/worker/renderer suite, and a LaunchServices
+launch without an inspector. No signatures or quarantine attributes are changed
+after packaging. A `validated-internal.json` readiness marker is written only
+after both containers pass and their final hashes still match.
+
+CI requires native `macos-26` arm64, `macos-15` arm64 and `macos-15-intel` x64.
+It records the actual OS version and rejects Rosetta/mismatched runner versions.
+PR runs never upload binaries. A separately approved manual workflow dispatch can
+retain passing internal candidates; it cannot publish a GitHub Release.
+
+This is not Developer ID author identity,
 notarization or Gatekeeper approval. Those signing steps have not run in a Windows
 session. The config reads no Apple account credentials or provisioning profiles.
 
