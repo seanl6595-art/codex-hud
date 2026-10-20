@@ -102,7 +102,10 @@ jobs:
           assert.match(index.nativeRuntimeValidation,/^passed for final ZIP and DMG on 15\./);
           assert.deepEqual(report.containers.map(row=>row.container),['zip','dmg']);
           for(const row of report.containers)for(const key of ['signatureGatePassed','sourceResourcesMatched','embeddedNodeSuitePassed','nativeSQLiteRecorderWorkersRendererSuitePassed','launchServicesPassed'])assert.equal(row[key],true,key);
-          for(const container of ['zip','dmg'])assert.deepEqual(read('validation/'+container+'/signatures.json'),signatures);
+          // codesign canonicalizes /var to /private/var in temporary copies.
+          // Compare all signature data except its displayed absolute location.
+          const comparable=value=>({...value,binaries:value.binaries.map(row=>({...row,details:row.details.replace(/^Executable=.*\n/m,'')}))});
+          for(const container of ['zip','dmg'])assert.deepEqual(comparable(read('validation/'+container+'/signatures.json')),comparable(signatures));
           assert.equal(latest.artifacts.length,2);const artifacts=latest.artifacts.map(row=>{
             const name=path.basename(row.file);assert.match(name,/^codex-hud-desktop-[\w.-]+-macos-arm64-internal\.(zip|dmg)$/);
             const sha256=crypto.createHash('sha256').update(fs.readFileSync(row.file)).digest('hex');assert.equal(sha256,row.sha256,name);assert.equal(fs.statSync(row.file).size,row.bytes);
