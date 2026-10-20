@@ -87,9 +87,11 @@ jobs:
           name: codex-hud-macos-${{ matrix.arch }}-internal
           retention-days: 7
           if-no-files-found: error
+          # Build outputs are one level below macos/. Never traverse the DMG
+          # staging volume's Applications symlink or packaged app directories.
           path: |
-            desktop/out/macos/**/codex-hud-desktop-*-internal.zip
-            desktop/out/macos/**/codex-hud-desktop-*-internal.dmg
-            desktop/out/macos/**/SHA256SUMS
-            desktop/out/macos/**/artifact-index.json
+            desktop/out/macos/*-${{ matrix.arch }}-*/codex-hud-desktop-*-macos-${{ matrix.arch }}-internal.zip
+            desktop/out/macos/*-${{ matrix.arch }}-*/codex-hud-desktop-*-macos-${{ matrix.arch }}-internal.dmg
+            desktop/out/macos/*-${{ matrix.arch }}-*/SHA256SUMS
+            desktop/out/macos/*-${{ matrix.arch }}-*/artifact-index.json
       # No push, commit, tag, GitHub Release, Developer ID or notarization step.
