@@ -76,7 +76,12 @@ jobs:
       - name: Preserve telemetry/accounting source
         run: git diff --exit-code -- bin lib gui LICENSE NOTICE.md
       - name: Retain preview only after explicit artifact approval
-        if: ${{ inputs.retain_preview_artifacts }}
+        # Remove the temporary PR label after the approved first-attempt run.
+        if: >-
+          ${{ success() && github.run_attempt == '1' &&
+          (inputs.retain_preview_artifacts ||
+          (github.event_name == 'pull_request' && github.event.pull_request.number == 1 &&
+          contains(github.event.pull_request.labels.*.name, 'macos-internal-artifacts-approved'))) }}
         uses: actions/upload-artifact@v4
         with:
           name: codex-hud-macos-${{ matrix.arch }}-internal
