@@ -81,7 +81,7 @@ jobs:
           ${{ success() && github.run_attempt == '1' &&
           (inputs.retain_preview_artifacts ||
           (github.event_name == 'pull_request' && github.event.pull_request.number == 1 &&
-          contains(github.event.pull_request.labels.*.name, 'macos-internal-artifacts-approved'))) }}
+          contains(github.event.pull_request.labels.*.name, format('macos-internal-artifacts-approved-{0}', matrix.arch)))) }}
         uses: actions/upload-artifact@v4
         with:
           name: codex-hud-macos-${{ matrix.arch }}-internal
