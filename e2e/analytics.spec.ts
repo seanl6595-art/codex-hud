@@ -95,6 +95,13 @@ test('model trend expands, switches type and uses bilingual persistent UI',async
 test('comfortable layouts fit 1280, 1920, 2560 and narrow desktops without page overflow',async({page})=>{
   for(const width of [1280,1920,2560,768,390]){
     await page.setViewportSize({width,height:1050});await expect(page.locator('.usage-panel .chart')).toBeVisible();
+    // Visibility does not wait for Recharts' asynchronous ResizeObserver update.
+    // Measure only after the rendered chart has adopted its container's width.
+    await expect.poll(()=>page.locator('.usage-panel .recharts-responsive-container').evaluateAll(containers=>
+      containers.length>0&&containers.every(container=>{
+        const chart=container.querySelector('.recharts-wrapper');
+        return !!chart&&Math.abs(chart.getBoundingClientRect().width-container.getBoundingClientRect().width)<=1;
+      })),{message:'Usage chart must finish resizing before layout is measured'}).toBe(true);
     const sizes=await page.evaluate(()=>({page:document.documentElement.scrollWidth,view:innerWidth,main:document.querySelector('main')!.getBoundingClientRect().width,workspace:document.querySelector('.workspace')!.getBoundingClientRect().width,body:parseFloat(getComputedStyle(document.body).fontSize),chart:document.querySelector('.usage-panel .chart')!.getBoundingClientRect().height}));
     expect(sizes.page).toBeLessThanOrEqual(sizes.view);expect(sizes.body).toBeGreaterThanOrEqual(14);expect(sizes.chart).toBeGreaterThanOrEqual(340);
     if(width>=1280){expect(sizes.main/sizes.workspace).toBeGreaterThan(.9);expect(sizes.main/sizes.workspace).toBeLessThan(.96);}
